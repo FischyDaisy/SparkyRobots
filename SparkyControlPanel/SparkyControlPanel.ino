@@ -9,12 +9,11 @@ Developed by Miss Daisy FRC Team 341
  
 */
 
-char timedatearr[] = "__DATE__ __TIME__" ; 
-
 //  this is for test mode
 #include <AltSoftSerial.h>
 AltSoftSerial altser;
 const int mybaud = 600;
+boolean runTimeMonitorEnabled = false;
 // D8 - AltSoftSerial RX
 // D9 - AltSoftSerial TX
 
@@ -96,7 +95,15 @@ void setup(){
 
   triggerTime = millis() + 3000;  // 3 seconds from now
   delay(2000);
-  altser.println( timedatearr );
+  altser.println();
+  altser.print("Sparky Control Panel    :Created ");
+  altser.print( __DATE__ );
+  altser.print(" ");
+  altser.println( __TIME__ );
+  if ( digitalRead(TEST_SWITCH) == HIGH ) { // LOW is on
+    runTimeMonitorEnabled = false;
+    altser.println("Runtime Monitor is disabled");
+  }
 }
 /////////////////////  MAIN LOOP  /////////////////////////////
 void loop(){
@@ -159,6 +166,10 @@ void loop(){
   // check is display test on
   if ( digitalRead(TEST_SWITCH) == LOW ) { // LOW is on
     // ****  DISPLAY TESTING ******
+    if ( !runTimeMonitorEnabled ) {
+      altser.println("Monitor Activated");
+    }
+    runTimeMonitorEnabled = true;
     unsigned long testnow = millis();
     // once per second 
     if ( testnow >= triggerTime ) {
@@ -196,6 +207,10 @@ void loop(){
   else {  // test mode OFF, show main robot control signals
     static unsigned long updateDue = 0;
     unsigned long now = millis();
+    if ( runTimeMonitorEnabled ) {
+      altser.println("Monitor Deactivated");
+    }
+    runTimeMonitorEnabled = false;
     if ( now > updateDue ) {
       updateDue = now + 100; // 10 updates per second, max
       setLED( 0, (analogRead(STICK1Y)+3)>>2);

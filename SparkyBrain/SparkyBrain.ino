@@ -13,6 +13,7 @@ Developed by Miss Daisy FRC Team 341
 #include <SparkyXfrBuffers.h>
 #include <NewPing.h>
 
+// declare local mode routines
 void enabledState(void);
 void disabledState(void);
 void localRobotRoutine(void);
@@ -22,7 +23,7 @@ const int ECHO_PIN_8     =  8;      // Arduino pin tied to echo pin on the ultra
 const int MAX_DISTANCE   = 80; // Maximum distance we want to ping for (in centimeters). Maximum sensor distance is rated at 400-500cm.
 const int BALL_DISTANCE  = 36;   // anything smaller means we see a ball
 
-NewPing sonar( TRIGGER_PIN_10, ECHO_PIN_8, MAX_DISTANCE); // NewPing setup of pins and maximum distance.
+NewPing sonar( TRIGGER_PIN_10, ECHO_PIN_8, MAX_DISTANCE); // NewPing constructor, sets pins and maximum distance.
 
 //create two transfer objects
 EasyTransfer ETin, ETout; 
@@ -30,8 +31,11 @@ EasyTransfer ETin, ETout;
 //  global timing variables
 long unsigned int lastUpdateTime = 0; // asynchronous link verification 
 long unsigned int lastBlinkToggle = 0; // link status LED, follows its own definite timing
-static int VIN_accum;
 
+// filter accumulators
+int VIN_accum;
+
+// Message count tracking
 long int lastMessageCounter = 0;
 long int messageDropCounter = 1000;
 
@@ -59,17 +63,19 @@ const int VIN_PIN_0          = 0;
 
 ///////////////////// SETUP, called once at start ///////////////////////////////////////////////
 void setup(){
+  // Serial is connected throught the Bluetooth modules to the master
   Serial.begin(9600);
-  //start the library, pass in the data details and the name of the serial port. Can be Serial, Serial1, Serial2, etc.
+  //start the library, pass in the data details and the name of the serial port.
   ETin.begin(details(rxdata), &Serial);
   ETout.begin(details(txdata), &Serial);
 
+  // set transmitter buffer to default values
   txdata.buttonstate = HIGH;
   txdata.supplyvoltagereading = analogRead(VIN_PIN_0);
   txdata.ballready = false;
   txdata.packetreceivedcount = 0;
 
-  // init rxdata to safe values for before first packet
+  // init rxdata to safe values, in case they are used before first packet sets them
   rxdata.stick1x = 512;
   rxdata.stick1y = 512;
   rxdata.stick1button = HIGH;
@@ -90,16 +96,16 @@ void setup(){
   rightDriveMotor.attach(5);
   intakeMotor.attach(6);
   shooterMotor.attach(7);
-                            // pin 8 set to sonar sensor input, pinmode output, by newping declare
+                            // pin 8 set to sonar sensor output, pinmode input, by newping constructor
   conveyorMotor.attach(9);
-                            // pin 10 set to sonar sensor output, pinmode input, by newping declare
+                            // pin 10 set to sonar sensor input, pinmode output, by newping constructor
                             pinMode(LINK_STATUS_LED_11, OUTPUT);  
                             pinMode(LINK_DATA_TEST_12, INPUT_PULLUP); // push_button for link data test
                             pinMode(LINK_DATA_LED_13, OUTPUT);       // link data test output
 }
 
 void loop(){
-  //then we will always go ahead and send the data out
+  //each time we will unconditionally go ahead and send the data out
   txdata.transmitpacketcount++;
   ETout.sendData();
     
@@ -139,10 +145,13 @@ void loop(){
     //delay for good measure before write routine
   delay(10);
 
-  txdata.buttonstate = digitalRead( TEST_SWITCH_4 );
-  if ( !txdata.buttonstate ) {
-    localRobotRoutine(); 
-  }  //end of test if
+  //  check for TEST mode
+  if ( !digitalRead( TEST_SWITCH_4)  ) {  // LOW is active
+    txdata.buttonstate = !digitalRead( LINK_DATA_TEST_12 ); // when active send pin 12
+    localRobotRoutine();      // run testing routine
+  } else {
+    txdata.buttonstate = -1;  // TEST not active
+  }
 
   // scale and filter the voltage reading, accum is 16 times reading
   VIN_accum = VIN_accum - (VIN_accum>>4)  + ((analogRead(VIN_PIN_0)*32)/20);
