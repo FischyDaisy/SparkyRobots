@@ -152,11 +152,7 @@ void loop(){
   for(int i=0; i<5; i++){
     //remember, you could use an if() here to check for new data, this time it's not needed.
     ETin.receiveData();
-    //set our LED on or off based on what we received from the other Arduino    
-//    digitalWrite(BLINKLED, rxdata.buttonstate);
-    
-    //delay
-    delay(10);
+    delay(10);   // short delay between receive attempts
   }
   
   //delay for good measure
@@ -196,7 +192,10 @@ void loop(){
         altser.print( ", " );
         altser.print( rxdata.buttonstate );
         altser.print( ", " );
-        altser.println( rxdata.ballready );
+        altser.print( rxdata.ballready );
+        altser.print( ", " );
+        altser.println( txdata.counter );
+        
       } else {
         altser.println( "VOLT XMIT RECV SSECHO D12 BALL" );
         headingTime = testnow + 20000;
