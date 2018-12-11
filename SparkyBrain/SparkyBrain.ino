@@ -55,6 +55,7 @@ const int servoFullBackVal = 0;    // 0 is full reverse
 TO_SPARKY_DATA_STRUCTURE rxdata;
 FROM_SPARKY_DATA_STRUCTURE txdata;
 
+const int BALL_OVERRIDE_2    =  2;
 const int TEST_SWITCH_4      =  4;
 const int LINK_STATUS_LED_11 = 11; 
 const int LINK_DATA_TEST_12  = 12;
@@ -90,7 +91,7 @@ void setup(){
   rxdata.counter = -1;
 
 // pin 0 is rx, 1 is tx - for serial port, not used as DIO
-// pin 2 not used
+                            pinMode( BALL_OVERRIDE_2, INPUT_PULLUP); // pin 2 used during test mode as ball override
   leftDriveMotor.attach(3);
                             pinMode( TEST_SWITCH_4, INPUT_PULLUP);
   rightDriveMotor.attach(5);
@@ -129,9 +130,9 @@ void loop(){
     
     // Check that the sparky is safe to operate
 //    if (  { millis() - lastUpdateTime) < 250 ) {
-    if ( rxdata.counter > 0 && rxdata.enabled > 0 && messageDropCounter <= 10 ) {
+    if ( /*rxdata.counter > 0 &&*/ rxdata.enabled > 0 && messageDropCounter <= 10 ) {
 
-    // An update was received recently, process the data packet
+      // An update was received recently, process the data packet
       enabledState();
     } else {
       // There are no new data packets to control the robot, turn everything off so
@@ -159,6 +160,30 @@ void loop(){
    
 } // end of loop
 
+///////////////////  set ball presence  //////////////////
+boolean isBallPresent() {
+  int sonarDistance;
+  if ( !digitalRead( TEST_SWITCH_4) ) {  // LOW is active
+    if ( !digitalRead(BALL_OVERRIDE_2) ) {   // LOW is active, say ball present
+      txdata.ballready = true;
+    } else {    
+      txdata.ballready = false;
+    }
+  } else {
+    sonarDistance = sonar.ping_cm();
+    if ( rxdata.enabled ) {
+      if ( sonarDistance <= BALL_DISTANCE || sonarDistance >= MAX_DISTANCE ) { // if ball is where it needs to be
+        txdata.ballready = true;
+      } else { 
+        txdata.ballready = false;
+      }
+    } else {
+        txdata.ballready = sonarDistance; // for testing, it is not referenced, just sent to panel
+    }
+  }
+  return txdata.ballready;
+}
+
 //////////////  stop all activity if communications not working
 void disabledState(){
   // One or more conditions are not satisfied to allow the sparky to operate, disable all motors
@@ -170,23 +195,20 @@ void disabledState(){
   conveyorMotor.write(servoHaltVal);
   shooterMotor.write(servoHaltVal);
   txdata.shooterspeedecho = -rxdata.shooterspeed; 
-  txdata.ballready = sonar.ping_cm();
-  
+  isBallPresent();   // check ball for testing purposes
+ 
   // do a fast blink
   if ( lastBlinkToggle < millis()-200 ) { //if more than a 1/5 second ago
     lastBlinkToggle = millis();
     if ( bitRead( PORTB,3) ) {   // this how to read an output pin
       digitalWrite( LINK_STATUS_LED_11, LOW);
-      txdata.ballready = sonar.ping_cm();
     } else {
       digitalWrite( LINK_STATUS_LED_11, HIGH);
-      txdata.ballready = false;
     }
   }
 }
 
 int shooterSpeed; 
-int sonarDistance;
 
 void enabledState(){
   // If in the enabled state, the sparky bot is allowed to move 
@@ -232,12 +254,8 @@ void enabledState(){
 
 ///////  BELT FUNCTIONS: ONLY ENABLED WHEN BALL IS NOT IN SHOOTER  ////////////
 //      SHOOTER FUNCTIONS: ONLY ENABLED WHEN BALL IS IN SHOOTER
-  sonarDistance = sonar.ping_cm();
-  if ( sonarDistance <= BALL_DISTANCE || sonarDistance >= MAX_DISTANCE ) { // if ball is where it needs to be
-    txdata.ballready = true;
-
+  if ( isBallPresent() ) {
     //  light the green LEDs   TBD
-    //  set ball seen flag for panel  TBD
     
     //  // Map the potentiometer dial (0-1023) to a valid positive shooter speed (90-179)
       shooterSpeed = map(rxdata.shooterspeed, 0, 1023, servoHaltVal, servoFullForeVal);
@@ -254,8 +272,6 @@ void enabledState(){
     intakeMotor.write(servoHaltVal);   // in case this is first time seeing ball
     
   } else {   // no ball   //////////////
-    txdata.ballready = false;
-
     // turn LEDs off TBD
     
     shooterMotor.write(servoHaltVal);   ///off shooterSpeed);
@@ -290,6 +306,7 @@ void localRobotRoutine(){
 //  conveyorMotor.write(servoHaltVal);
 //  shooterMotor.write(servoHaltVal);
 
+  isBallPresent();   // check ball for test purposes
   
   // do a quick blink
   if ( lastBlinkToggle < millis()-200 ) { //if more than a 1/5 second ago
