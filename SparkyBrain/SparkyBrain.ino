@@ -237,15 +237,15 @@ void enabledState(){
     rightMotorSpeed = map(rxdata.stick2x, 0, 1023, 0, 179);
   } else {
     // Arcade Mode - left joystick controls speed, right joystick controls turning
-    int speedVal = map(rxdata.stick1x, 0, 1023, 0, 179);
-    int turnVal = map(rxdata.stick2y, 0, 1023, 0, 179);
-    leftMotorSpeed = speedVal - turnVal + 90;
-    rightMotorSpeed = speedVal + turnVal - 90;
-    if (leftMotorSpeed < 0){
-      leftMotorSpeed = 0;
+    int speedVal = map(rxdata.stick2y, 0, 1023, 0, 179);
+    int turnVal = map(rxdata.stick1x, 0, 1023, 0, 179);
+    leftMotorSpeed = speedVal + turnVal - 90;
+    rightMotorSpeed = speedVal - turnVal + 90;
+    if (rightMotorSpeed < 0){
+      rightMotorSpeed = 0;
     }
-    if (rightMotorSpeed > 179){
-      rightMotorSpeed = 179;
+    if (leftMotorSpeed > 179){
+      left MotorSpeed = 179;
     }
   }
   // Issue the commanded speed to the drive motors

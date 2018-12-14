@@ -108,11 +108,11 @@ void setup(){
 /////////////////////  MAIN LOOP  /////////////////////////////
 void loop(){
   //first, lets read our potentiometers and button and store it in our data structure
-  txdata.stick1x = analogRead(STICK1X);
-  txdata.stick1y = analogRead(STICK1Y);
+  txdata.stick1x = (1023 - analogRead(STICK2X));
+  txdata.stick1y = (1023 - analogRead(STICK2Y));
   txdata.stick1button = !digitalRead(L_STICK_BUTTON);
-  txdata.stick2x = analogRead(STICK2X);
-  txdata.stick2y = analogRead(STICK2Y);
+  txdata.stick2x = (analogRead(STICK1X));
+  txdata.stick2y = (analogRead(STICK1Y));
   txdata.stick2button = !digitalRead(R_STICK_BUTTON);
 
   txdata.drivemode = !digitalRead(DRIVE_MODE);
