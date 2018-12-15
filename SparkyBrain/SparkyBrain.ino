@@ -46,10 +46,13 @@ Servo intakeMotor;
 Servo conveyorMotor;
 Servo shooterMotor;
 
-// Servo ouptut is between 0 and 179
+// Servo ouptut is from 0 to 179
 const int servoHaltVal     = 90;   // 90 is no motion
 const int servoFullForeVal = 179;  // 179 is full forward
 const int servoFullBackVal = 0;    // 0 is full reverse
+
+// Stick input is from 0 to 1023
+const int stickHaltVal     = 512;   // this is center, no motion
 
 //  declare the transfer buffers
 TO_SPARKY_DATA_STRUCTURE rxdata;
@@ -66,6 +69,8 @@ const int VIN_PIN_0          = 0;
 void setup(){
   // Serial is connected throught the Bluetooth modules to the master
   Serial.begin(9600);
+  while (!Serial) ; // wait for serial port to connect. Needed for native USB
+
   //start the library, pass in the data details and the name of the serial port.
   ETin.begin(details(rxdata), &Serial);
   ETout.begin(details(txdata), &Serial);
@@ -77,12 +82,12 @@ void setup(){
   txdata.packetreceivedcount = 0;
 
   // init rxdata to safe values, in case they are used before first packet sets them
-  rxdata.stick1x = 512;
-  rxdata.stick1y = 512;
-  rxdata.stick1button = HIGH;
-  rxdata.stick2x = 512;
-  rxdata.stick2y = 512;
-  rxdata.stick2button = HIGH;
+  rxdata.stickLx = stickHaltVal;
+  rxdata.stickLy = stickHaltVal;
+  rxdata.stickLbutton = HIGH;
+  rxdata.stickRx = stickHaltVal;
+  rxdata.stickRy = stickHaltVal;
+  rxdata.stickRbutton = HIGH;
   rxdata.shooterspeed = 1023;
   rxdata.intake = HIGH;
   rxdata.shoot = HIGH;
@@ -184,6 +189,29 @@ boolean isBallPresent() {
   return txdata.ballready;
 }
 
+///////////////////  apply stick profile  //////////////////
+// argument:   stick value from receive buffer, 0 - 1023
+// Return:     servo value, 0-179, scaled and profile applied
+// profile:   Apply a deadband to all joystick values so that 
+//            anything between +/-50 from stick center is converted to servo center.
+const long int deadband = 50;
+//------------------------------------------------
+int convertStickToServo(int stickValue) {
+  long int longServoValue;  // use longs, 180*1024 > 32768
+
+  if ( stickValue > (stickHaltVal + deadband) ) {
+    longServoValue = ( ((long)(stickValue - deadband)) * 180) >> 10; // /1024; // servo range / stick range
+  } else {
+    if ( stickValue < (stickHaltVal - deadband) ) {
+      longServoValue = ( ((long)(stickValue + deadband)) * 180) >> 10; //  /1024;
+    } else {
+      longServoValue = servoHaltVal; //else stick in deadband, set Halt value
+    }
+  }
+  return (int) longServoValue;
+}
+
+
 //////////////  stop all activity if communications not working
 void disabledState(){
   // One or more conditions are not satisfied to allow the sparky to operate, disable all motors
@@ -209,48 +237,35 @@ void disabledState(){
 }
 
 int shooterSpeed; 
-
+/////////////////////  enabledState   /////////////////////////////
 void enabledState(){
   // If in the enabled state, the sparky bot is allowed to move 
 
-  // Apply a deadband to all joystick values so that anything between +/-50 from center is considered center
-  if (rxdata.stick1x > 462 && rxdata.stick1x < 562){
-    rxdata.stick1x = 512;
-  }
-  if (rxdata.stick1y > 462 && rxdata.stick1y < 562){
-    rxdata.stick1y = 512;
-  }
-  if (rxdata.stick2x > 462 && rxdata.stick2x < 562){
-    rxdata.stick2x = 512;
-  }
-  if (rxdata.stick2y > 462 && rxdata.stick2y < 562){
-    rxdata.stick2y = 512;
-  }
-  
   // Steer the robot based on selected drive mode
   int leftMotorSpeed = servoHaltVal;
   int rightMotorSpeed = servoHaltVal;
   if (rxdata.drivemode < 1){
     // Tank Mode - left joystick control left drive, right joystick controls right drive
-    // Need to remap the joystick value range of 0-1023 to 0-179
-    leftMotorSpeed = map(rxdata.stick1x, 0, 1023, 0, 179);
-    rightMotorSpeed = map(rxdata.stick2x, 0, 1023, 0, 179);
+    leftMotorSpeed  = convertStickToServo(rxdata.stickLx); 
+    rightMotorSpeed = convertStickToServo(rxdata.stickRx);
   } else {
     // Arcade Mode - left joystick controls speed, right joystick controls turning
-    int speedVal = map(rxdata.stick2y, 0, 1023, 0, 179);
-    int turnVal = map(rxdata.stick1x, 0, 1023, 0, 179);
-    leftMotorSpeed = speedVal + turnVal - 90;
+    int speedVal = convertStickToServo(rxdata.stickLx); 
+    int  turnVal = convertStickToServo(rxdata.stickRy);
+    leftMotorSpeed  = speedVal + turnVal - 90;
     rightMotorSpeed = speedVal - turnVal + 90;
-    if (rightMotorSpeed < 0){
-      rightMotorSpeed = 0;
-    }
-    if (leftMotorSpeed > 179){
-      left MotorSpeed = 179;
-    }
+    
+    if ( leftMotorSpeed < 0  ) leftMotorSpeed  = 0;    // eg.   0   + 0   - 90
+    if ( leftMotorSpeed > 179) leftMotorSpeed  = 179;  // eg.   180 + 180 - 90
+    if (rightMotorSpeed < 0  ) rightMotorSpeed = 0;    // eg.   0   - 180 + 90
+    if (rightMotorSpeed > 179) rightMotorSpeed = 179;   // eg.   180 - 0   + 90
   }
   // Issue the commanded speed to the drive motors
-  leftDriveMotor.write(leftMotorSpeed);
+  // both motors spin ull clockwise for 179, left motor mounted opposite direction, so
+  leftDriveMotor.write(179 - leftMotorSpeed); // left wheel must spin opposite
   rightDriveMotor.write(rightMotorSpeed);
+  txdata.leftdrivemotor = leftMotorSpeed;
+  txdata.rightdrivemotor = rightMotorSpeed;
 
 ///////  BELT FUNCTIONS: ONLY ENABLED WHEN BALL IS NOT IN SHOOTER  ////////////
 //      SHOOTER FUNCTIONS: ONLY ENABLED WHEN BALL IS IN SHOOTER

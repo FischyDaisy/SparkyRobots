@@ -43,10 +43,10 @@ TO_SPARKY_DATA_STRUCTURE txdata;
 #define R_STICK_BUTTON  3
 #define L_STICK_BUTTON  2
 
-#define STICK2X      0
-#define STICK2Y      1
-#define STICK1X      2
-#define STICK1Y      3
+#define L_STICK_X      0    // left stick attached to A0,A1,D2
+#define L_STICK_Y      1
+#define R_STICK_X      2    //right stick attached to A2,A3,D3
+#define R_STICK_Y      3
 #define SHOOTERSPEED 4
 
 unsigned long triggerTime;
@@ -107,13 +107,13 @@ void setup(){
 }
 /////////////////////  MAIN LOOP  /////////////////////////////
 void loop(){
-  //first, lets read our potentiometers and button and store it in our data structure
-  txdata.stick1x = (1023 - analogRead(STICK2X));
-  txdata.stick1y = (1023 - analogRead(STICK2Y));
-  txdata.stick1button = !digitalRead(L_STICK_BUTTON);
-  txdata.stick2x = (analogRead(STICK1X));
-  txdata.stick2y = (analogRead(STICK1Y));
-  txdata.stick2button = !digitalRead(R_STICK_BUTTON);
+  // read our potentiometers and buttons and store raw data in data structure for transmission
+  txdata.stickLx = analogRead(L_STICK_X);
+  txdata.stickLy = analogRead(L_STICK_Y);
+  txdata.stickLbutton = !digitalRead(L_STICK_BUTTON);
+  txdata.stickRx = analogRead(R_STICK_X);
+  txdata.stickRy = analogRead(R_STICK_Y);
+  txdata.stickRbutton = !digitalRead(R_STICK_BUTTON);
 
   txdata.drivemode = !digitalRead(DRIVE_MODE);
   txdata.enabled = !digitalRead(SYSTEM_ENABLE);
@@ -212,8 +212,8 @@ void loop(){
     runTimeMonitorEnabled = false;
     if ( now > updateDue ) {
       updateDue = now + 100; // 10 updates per second, max
-      setLED( 0, (analogRead(STICK1Y)+3)>>2);
-      setLED( 1, (analogRead(STICK2Y)+3)>>2);
+      setLED( 0, (analogRead(L_STICK_X)+3)>>2);
+      setLED( 1, (analogRead(R_STICK_X)+3)>>2);
       setLED( 4, buttonValue);
     }  
   }
@@ -275,9 +275,9 @@ L_STICK_BUTTON
 #define PANEL_LED_1     5
 
 
-STICK1X
-STICK1Y
-STICK2X
-STICK2Y
+L_STICK_X
+L_STICK_Y
+R_STICK_X
+R_STICK_Y
 SHOOTERSPEED 
 */
