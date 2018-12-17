@@ -237,6 +237,7 @@ void disabledState(){
 }
 
 int shooterSpeed; 
+unsigned long shootReleaseTime = 0;
 /////////////////////  enabledState   /////////////////////////////
 void enabledState(){
   // If in the enabled state, the sparky bot is allowed to move 
@@ -264,22 +265,23 @@ void enabledState(){
   // both motors spin ull clockwise for 179, left motor mounted opposite direction, so
   leftDriveMotor.write(179 - leftMotorSpeed); // left wheel must spin opposite
   rightDriveMotor.write(rightMotorSpeed);
-  txdata.leftdrivemotor = leftMotorSpeed;
-  txdata.rightdrivemotor = rightMotorSpeed;
+  txdata.leftmotorcommand = leftMotorSpeed;
+  txdata.rightmotorcommand = rightMotorSpeed;
 
 ///////  BELT FUNCTIONS: ONLY ENABLED WHEN BALL IS NOT IN SHOOTER  ////////////
 //      SHOOTER FUNCTIONS: ONLY ENABLED WHEN BALL IS IN SHOOTER
+  // Map the potentiometer dial (0-1023) to a valid positive shooter speed (90-179)
+  //shooterSpeed = map(rxdata.shooterspeed, 0, 1023, servoHaltVal, servoFullForeVal);
+  shooterSpeed = (((long)(rxdata.shooterspeed)) * 180) >> 10;
+  txdata.shooterspeedecho = shooterSpeed;      // aassigning shooterSpeed to echo 
+  
   if ( isBallPresent() ) {
     //  light the green LEDs   TBD
     
-    //  // Map the potentiometer dial (0-1023) to a valid positive shooter speed (90-179)
-      shooterSpeed = map(rxdata.shooterspeed, 0, 1023, servoHaltVal, servoFullForeVal);
-    // Run the shooter
-    txdata.shooterspeedecho = shooterSpeed;      // aassigning shooterSpeed to echo 
-    shooterMotor.write(shooterSpeed);  // ball is here, run shoother motor
+   // Run the shooter
+    shooterMotor.write(shooterSpeed);  // ball is here, run shooter motor
     if (rxdata.shoot > 0 ) {    // shooter button pressed
-      // Run the conveyor forward
-      conveyorMotor.write(servoFullBackVal);
+      shootReleaseTime = millis() + 1500;   // trigger and hold shoot even if button released
     } else {
       // Stop the conveyor
       conveyorMotor.write(servoHaltVal);
@@ -302,6 +304,14 @@ void enabledState(){
       digitalWrite(LINK_DATA_LED_13, HIGH); 
     }
   }
+
+  // if a shoot is in progress
+  if ( shootReleaseTime >= millis() ) {   // if shoot release is in the future
+    // Run the conveyor forward
+    conveyorMotor.write(servoFullBackVal);
+    // ball may be gone from sensor, but shoot still in progress, run shooter motor
+    shooterMotor.write(shooterSpeed);  
+  }
   
   // do a slow blink to show enabled and running
   if ( lastBlinkToggle < millis()-1000 ) { //if more than a second ago
@@ -312,16 +322,71 @@ void enabledState(){
       digitalWrite( LINK_STATUS_LED_11, HIGH);
     }
   }
+}   // end of enabledState()
+
+////////////   doCalibrationSweep   //////////////
+void doCalibrationSweep( Servo *theservo ) {   // note that this routine is blocking
+  for (int i = 90; i >= 0; i -= 10 ) {
+    theservo->write( i );
+    delay(50);
+    digitalWrite( LINK_STATUS_LED_11,  !bitRead( PORTB,3) ); // flip the LED fast
+  }
+  delay(500);
+  for (int i = 9; i <= 179; i += 10 ) {
+    theservo->write( i );
+    delay(50);
+    digitalWrite( LINK_STATUS_LED_11,  !bitRead( PORTB,3) ); // flip the LED fast
+  }
+  delay(500);
+  for (int i = 179; i >= 90; i -= 10 ) {
+    theservo->write( i );
+    delay(50);
+    digitalWrite( LINK_STATUS_LED_11,  !bitRead( PORTB,3) ); // flip the LED fast
+ }
+  theservo->write(servoHaltVal); 
+  delay(1000);
+  digitalWrite( LINK_STATUS_LED_11,  !bitRead( PORTB,3) ); // flip the LED to end
+   
+  // make a calibration done sound  TBD
 }
 
+//  ////////////////   SW 2 is on, test mode.     //////////////
 void localRobotRoutine(){
-//  leftDriveMotor.write(servoHaltVal);
-//  rightDriveMotor.write(servoHaltVal);
+  leftDriveMotor.write(servoHaltVal);
+  rightDriveMotor.write(servoHaltVal);
+  shooterMotor.write(servoHaltVal);   ///off shooterSpeed);
+  intakeMotor.write(servoHaltVal);
+  conveyorMotor.write(servoHaltVal);
+
+/////// code for calibrating computer controlled servos
+  if (rxdata.intake > 0){  // intake button pressed 
+    delay(500);
+    if (rxdata.intake > 0){  // intake button still pressed 
+      if (rxdata.shoot > 0 ) { // shooter button now also pressed
+        doCalibrationSweep( &shooterMotor );
+      } else {   // only the intake pressed
+        doCalibrationSweep( &intakeMotor );
+      }
+    }
+  }
+  if (rxdata.shoot > 0){  // shoot button pressed 
+    delay(500);
+    if (rxdata.shoot > 0){  // shot button still pressed 
+      if (rxdata.intake > 0 ) { // intake button now also pressed
+        doCalibrationSweep( &shooterMotor );
+      } else {   // only the intake pressed
+        doCalibrationSweep( &intakeMotor );
+      }
+    }
+  }
+
+  // sweep the shooter motor if both pressed
+//  if (rxdata.shoot > 0 ) {    // shooter button pressed
 //  intakeMotor.write(servoHaltVal);
 //  conveyorMotor.write(servoHaltVal);
 //  shooterMotor.write(servoHaltVal);
 
-  isBallPresent();   // check ball for test purposes
+  isBallPresent();   // check ball for test  transmit purposes
   
   // do a quick blink
   if ( lastBlinkToggle < millis()-200 ) { //if more than a 1/5 second ago
