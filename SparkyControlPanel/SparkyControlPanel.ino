@@ -70,6 +70,8 @@ void setLED(int LEDnum, unsigned int brightness) {
 // called once at start
 void setup(){
   Serial.begin(9600);
+  while (!Serial) ; // wait for serial port to connect. Needed for native USB
+  
   //start the library, pass in the data details and the name of the serial port. Can be Serial, Serial1, Serial2, etc.
   ETin.begin(details(rxdata), &Serial);
   ETout.begin(details(txdata), &Serial);
