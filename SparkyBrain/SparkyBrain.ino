@@ -16,7 +16,7 @@ Developed by Miss Daisy FRC Team 341
 // declare local mode routines
 void enabledState(void);
 void disabledState(void);
-void localRobotRoutine(void);
+void calibrationAndTests(void);
 
 const int TRIGGER_PIN_10 = 10; // Arduino pin tied to trigger pin on the ultrasonic sensor.
 const int ECHO_PIN_8     =  8;      // Arduino pin tied to echo pin on the ultrasonic sensor.
@@ -154,7 +154,7 @@ void loop(){
   //  check for TEST mode
   if ( !digitalRead( TEST_SWITCH_4)  ) {  // LOW is active
     txdata.buttonstate = !digitalRead( LINK_DATA_TEST_12 ); // when active send pin 12
-    localRobotRoutine();      // run testing routine
+    calibrationAndTests();      // run testing routine
   } else {
     txdata.buttonstate = -1;  // TEST not active
   }
@@ -168,12 +168,8 @@ void loop(){
 ///////////////////  set ball presence  //////////////////
 boolean isBallPresent() {
   int sonarDistance;
-  if ( !digitalRead( TEST_SWITCH_4) ) {  // LOW is active
-    if ( !digitalRead(BALL_OVERRIDE_2) ) {   // LOW is active, say ball present
-      txdata.ballready = true;
-    } else {    
-      txdata.ballready = false;
-    }
+  if ( !digitalRead(BALL_OVERRIDE_2) ) {   // LOW is active, say ball present
+    txdata.ballready = true;
   } else {
     sonarDistance = sonar.ping_cm();
     if ( rxdata.enabled ) {
@@ -351,7 +347,7 @@ void doCalibrationSweep( Servo *theservo ) {   // note that this routine is bloc
 }
 
 //  ////////////////   SW 2 is on, test mode.     //////////////
-void localRobotRoutine(){
+void calibrationAndTests(){
   leftDriveMotor.write(servoHaltVal);
   rightDriveMotor.write(servoHaltVal);
   shooterMotor.write(servoHaltVal);   ///off shooterSpeed);
@@ -380,11 +376,6 @@ void localRobotRoutine(){
     }
   }
 
-  // sweep the shooter motor if both pressed
-//  if (rxdata.shoot > 0 ) {    // shooter button pressed
-//  intakeMotor.write(servoHaltVal);
-//  conveyorMotor.write(servoHaltVal);
-//  shooterMotor.write(servoHaltVal);
 
   isBallPresent();   // check ball for test  transmit purposes
   
