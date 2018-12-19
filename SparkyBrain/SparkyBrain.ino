@@ -12,6 +12,7 @@ Developed by Miss Daisy FRC Team 341
 #include <EasyTransfer.h>
 #include <SparkyXfrBuffers.h>
 #include <NewPing.h>
+#include <EEPROM.h>
 
 // declare local mode routines
 void enabledState(void);
@@ -54,6 +55,12 @@ const int servoFullBackVal = 0;    // 0 is full reverse
 // Stick input is from 0 to 1023
 const int stickHaltVal     = 512;   // this is center, no motion
 
+// declare EEPROM addresses and variables to store values locally
+const int maxKnobAddr = 0;
+int16_t shootSpeedKnobMax;  // size of int16_t is always 2
+const int minKnobAddr = 2;
+int16_t shootSpeedKnobMin;
+
 //  declare the transfer buffers
 TO_SPARKY_DATA_STRUCTURE rxdata;
 FROM_SPARKY_DATA_STRUCTURE txdata;
@@ -88,7 +95,7 @@ void setup(){
   rxdata.stickRx = stickHaltVal;
   rxdata.stickRy = stickHaltVal;
   rxdata.stickRbutton = HIGH;
-  rxdata.shooterspeed = 1023;
+  rxdata.shooterspeed = 1023; // 1023 is lowest speed, pot wired 5V ccw
   rxdata.intake = HIGH;
   rxdata.shoot = HIGH;
   rxdata.drivemode = HIGH;
@@ -108,6 +115,20 @@ void setup(){
                             pinMode(LINK_STATUS_LED_11, OUTPUT);  
                             pinMode(LINK_DATA_TEST_12, INPUT_PULLUP); // push_button for link data test
                             pinMode(LINK_DATA_LED_13, OUTPUT);       // link data test output
+
+  /////   sync with EEPROM
+  // NOTE:  speed knob is wired so max (cw) is near 0 and min (ccw) is near 1023
+  EEPROM.get( maxKnobAddr, shootSpeedKnobMax);  // read int in
+  if ( shootSpeedKnobMax < 0 || shootSpeedKnobMax > 256 ) { // if not in range, probably never calibrated
+    shootSpeedKnobMax = 256; // max must be positive, start high, calibrate down at runtime
+    EEPROM.put( maxKnobAddr, shootSpeedKnobMax);
+  }
+  EEPROM.get( minKnobAddr, shootSpeedKnobMin);
+  if ( shootSpeedKnobMin < 768 || shootSpeedKnobMin > 1023 ) { // if not in range, probably never calibrated
+    shootSpeedKnobMin = 768; // Min must be positive, start low, calibrate up at runtime
+    EEPROM.put( minKnobAddr, shootSpeedKnobMin);
+  }
+
 }
 
 void loop(){
@@ -132,9 +153,9 @@ void loop(){
     }else{
       messageDropCounter = 0;
     }
-    
+
+    // pull rx data before checking state
     // Check that the sparky is safe to operate
-//    if (  { millis() - lastUpdateTime) < 250 ) {
     if ( /*rxdata.counter > 0 &&*/ rxdata.enabled > 0 && messageDropCounter <= 10 ) {
 
       // An update was received recently, process the data packet
@@ -154,7 +175,7 @@ void loop(){
   //  check for TEST mode
   if ( !digitalRead( TEST_SWITCH_4)  ) {  // LOW is active
     txdata.buttonstate = !digitalRead( LINK_DATA_TEST_12 ); // when active send pin 12
-    calibrationAndTests();      // run testing routine
+    calibrationAndTests();      // run testing routine, returns immediately unless cal is signaled
   } else {
     txdata.buttonstate = -1;  // TEST not active
   }
@@ -223,7 +244,7 @@ void disabledState(){
  
   // do a fast blink
   if ( lastBlinkToggle < millis()-200 ) { //if more than a 1/5 second ago
-    lastBlinkToggle = millis();
+    lastBlinkToggle = millis();  // triggered and reset.
     if ( bitRead( PORTB,3) ) {   // this how to read an output pin
       digitalWrite( LINK_STATUS_LED_11, LOW);
     } else {
@@ -232,10 +253,12 @@ void disabledState(){
   }
 }
 
-int shooterSpeed; 
+ 
 unsigned long shootReleaseTime = 0;
 /////////////////////  enabledState   /////////////////////////////
 void enabledState(){
+  int shooterSpeed, rawShooterSpeed;
+  
   // If in the enabled state, the sparky bot is allowed to move 
 
   // Steer the robot based on selected drive mode
@@ -266,13 +289,25 @@ void enabledState(){
 
 ///////  BELT FUNCTIONS: ONLY ENABLED WHEN BALL IS NOT IN SHOOTER  ////////////
 //      SHOOTER FUNCTIONS: ONLY ENABLED WHEN BALL IS IN SHOOTER
-  // Map the potentiometer dial (0-1023) to a valid positive shooter speed (90-179)
-  //shooterSpeed = map(rxdata.shooterspeed, 0, 1023, servoHaltVal, servoFullForeVal);
-  shooterSpeed = (((long)(rxdata.shooterspeed)) * 180) >> 10;
-  txdata.shooterspeedecho = shooterSpeed;      // aassigning shooterSpeed to echo 
+
+  ///////  calculate shooter wheel speed    ////////////
+  // NOTE:  speed knob is wired so max (cw) is near 0 and min (ccw) is near 1023
+  // when transmitted 1023 is lowest speed, 0 is highest
+  rawShooterSpeed = 1023 - rxdata.shooterspeed; // invert it to a natural 0 low, 1023 high
+  if ( rawShooterSpeed > shootSpeedKnobMax  ) { //recalibrate, first time seeing value this high
+    shootSpeedKnobMax = rawShooterSpeed;
+    EEPROM.put( maxKnobAddr, shootSpeedKnobMax);
+  }
+  if ( rawShooterSpeed < shootSpeedKnobMin  ) { //recalibrate, first time seeing value this low
+    shootSpeedKnobMin = rawShooterSpeed;
+    EEPROM.put( minKnobAddr, shootSpeedKnobMin);
+  }
+  // Map the potentiometer dial (min to max) to a valid positive shooter speed (90+20 to 179), 20 is min speed
+  shooterSpeed = map(rawShooterSpeed, shootSpeedKnobMin, shootSpeedKnobMax, servoHaltVal+20, servoFullForeVal);
+  txdata.shooterspeedecho = shooterSpeed;      // assigning shooterSpeed to echo for testing
   
   if ( isBallPresent() ) {
-    //  light the green LEDs   TBD
+    //  light the green ballLEDs   TBD
     
    // Run the shooter
     shooterMotor.write(shooterSpeed);  // ball is here, run shooter motor
@@ -285,7 +320,7 @@ void enabledState(){
     intakeMotor.write(servoHaltVal);   // in case this is first time seeing ball
     
   } else {   // no ball   //////////////
-    // turn LEDs off TBD
+    // turn ballLEDs off TBD
     
     shooterMotor.write(servoHaltVal);   ///off shooterSpeed);
     if (rxdata.intake > 0){  // intake button pressed 
@@ -322,26 +357,29 @@ void enabledState(){
 
 ////////////   doCalibrationSweep   //////////////
 void doCalibrationSweep( Servo *theservo ) {   // note that this routine is blocking
-  for (int i = 90; i >= 0; i -= 10 ) {
+  // make a calibration start sound  TBD
+
+  for (int i = 90; i >= 0; i -= 5 ) {
     theservo->write( i );
     delay(50);
     digitalWrite( LINK_STATUS_LED_11,  !bitRead( PORTB,3) ); // flip the LED fast
   }
-  delay(500);
-  for (int i = 9; i <= 179; i += 10 ) {
+  delay(1000);
+  for (int i = 9; i <= 179; i += 5 ) {
     theservo->write( i );
     delay(50);
     digitalWrite( LINK_STATUS_LED_11,  !bitRead( PORTB,3) ); // flip the LED fast
   }
-  delay(500);
-  for (int i = 179; i >= 90; i -= 10 ) {
+  delay(1000);
+  for (int i = 179; i >= 90; i -= 5 ) {
     theservo->write( i );
     delay(50);
     digitalWrite( LINK_STATUS_LED_11,  !bitRead( PORTB,3) ); // flip the LED fast
  }
   theservo->write(servoHaltVal); 
-  delay(1000);
-  digitalWrite( LINK_STATUS_LED_11,  !bitRead( PORTB,3) ); // flip the LED to end
+  delay(500);
+  digitalWrite( LINK_STATUS_LED_11,  HIGH ); // flip the LED off to end
+  delay(3000);    //before going back to test mode
    
   // make a calibration done sound  TBD
 }
@@ -375,7 +413,6 @@ void calibrationAndTests(){
       }
     }
   }
-
 
   isBallPresent();   // check ball for test  transmit purposes
   
