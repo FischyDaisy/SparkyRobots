@@ -188,22 +188,24 @@ void loop(){
 
 ///////////////////  set ball presence  //////////////////
 boolean isBallPresent() {
-  int sonarDistance;
-  if ( !digitalRead(BALL_OVERRIDE_2) ) {   // LOW is active, say ball present
-    txdata.ballready = true;
-  } else {
-    sonarDistance = sonar.ping_cm();
-    if ( rxdata.enabled ) {
-      if ( sonarDistance <= BALL_DISTANCE || sonarDistance >= MAX_DISTANCE ) { // if ball is where it needs to be
-        txdata.ballready = true;
-      } else { 
-        txdata.ballready = false;
-      }
-    } else {
-        txdata.ballready = sonarDistance; // for testing, it is not referenced, just sent to panel
+  int sonarDistance, ballReady;
+  sonarDistance = sonar.ping_cm();
+  if ( rxdata.enabled ) {
+    if ( sonarDistance <= BALL_DISTANCE || sonarDistance >= MAX_DISTANCE ) { // if ball is where it needs to be
+      ballReady = true;
+    } else { 
+      ballReady = false;
     }
+  } else {
+      ballReady = sonarDistance; // for testing, it is not referenced, just sent to panel
   }
-  return txdata.ballready;
+  // when sensor is not working it says ball is present, need to say no ball to test system
+  // when sensor is working we need to say the ball is there to test the system
+  if ( !digitalRead(BALL_OVERRIDE_2) ) {   // LOW is active, invert ball present state
+    ballReady = !ballReady;
+  }
+  txdata.ballready = ballReady;
+  return ballReady;
 }
 
 ///////////////////  apply stick profile  //////////////////
